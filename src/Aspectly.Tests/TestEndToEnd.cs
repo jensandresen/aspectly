@@ -207,11 +207,6 @@ namespace Aspectly.Tests
             }
         }
 
-        public class InterceptionOptions
-        {
-            
-        }
-
         public interface IFoo
         {
             void Print();
