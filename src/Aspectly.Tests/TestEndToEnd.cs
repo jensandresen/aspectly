@@ -37,7 +37,7 @@ namespace Aspectly.Tests
             
             var proxy = sut.CreateProxy<IFoo>(
                 instance: new FooImpl(),
-                hooks: new InlineHooks<NonExistingAttribute>(
+                hook: new InlineHook<NonExistingAttribute>(
                     onBefore: () => wasInvoked = true
             ));
             
@@ -55,7 +55,7 @@ namespace Aspectly.Tests
             
             var proxy = sut.CreateProxy<IFoo>(
                 instance: new FooImpl(),
-                hooks: new InlineHooks<FooAttribute>(
+                hook: new InlineHook<FooAttribute>(
                     onBefore: () => wasInvoked = true
             ));
             
@@ -73,7 +73,7 @@ namespace Aspectly.Tests
             
             var proxy = sut.CreateProxy<IFoo>(
                 instance: new FooImpl(),
-                hooks: new InlineHooks<NonExistingAttribute>(
+                hook: new InlineHook<NonExistingAttribute>(
                     onAfter: () => wasInvoked = true
                 ));
             
@@ -91,7 +91,7 @@ namespace Aspectly.Tests
             
             var proxy = sut.CreateProxy<IFoo>(
                 instance: new FooImpl(),
-                hooks: new InlineHooks<FooAttribute>(
+                hook: new InlineHook<FooAttribute>(
                     onAfter: () => wasInvoked = true
                 ));
             
@@ -100,14 +100,14 @@ namespace Aspectly.Tests
             Assert.True(wasInvoked);
         }
 
-        public interface IHooks
+        public interface IHook
         {
             Type Attribute { get; }
             void OnBefore();
             void OnAfter();
         }
         
-        public class NullHook : IHooks
+        public class NullHook : IHook
         {
             public Type Attribute => typeof(Attribute);
             
@@ -122,7 +122,7 @@ namespace Aspectly.Tests
             }
         }
 
-        public abstract class Hooks<T> : IHooks where T : Attribute
+        public abstract class Hook<T> : IHook where T : Attribute
         {            
             public Type Attribute => typeof(T);
             
@@ -137,12 +137,12 @@ namespace Aspectly.Tests
             }
         }
 
-        public class InlineHooks<T> : Hooks<T> where T : Attribute
+        public class InlineHook<T> : Hook<T> where T : Attribute
         {
             private readonly Action _onBefore;
             private readonly Action _onAfter;
 
-            public InlineHooks(Action onBefore = null, Action onAfter = null)
+            public InlineHook(Action onBefore = null, Action onAfter = null)
             {
                 _onBefore = onBefore ?? (() => { });
                 _onAfter = onAfter ?? (() => { });
@@ -161,11 +161,11 @@ namespace Aspectly.Tests
         
         public class ProxyFactory
         {
-            public TProxy CreateProxy<TProxy>(TProxy instance, IHooks hooks = null) where TProxy : class
+            public TProxy CreateProxy<TProxy>(TProxy instance, IHook hook = null) where TProxy : class
             {
                 var proxy = DispatchProxy.Create<TProxy, Interceptor>();
                 var interceptor = proxy as Interceptor;
-                interceptor?.SetTarget(instance, hooks ?? new NullHook());
+                interceptor?.SetTarget(instance, hook ?? new NullHook());
                 
                 return proxy;
             }
@@ -174,7 +174,7 @@ namespace Aspectly.Tests
         public class Interceptor : DispatchProxy
         {
             private object _target;
-            private IHooks _hooks;
+            private IHook _hook;
 
             protected override object Invoke(MethodInfo targetMethod, object[] args)
             {
@@ -183,26 +183,26 @@ namespace Aspectly.Tests
                 
                 var implementationMethodInfo = map.TargetMethods[index];
 
-                var annotation = implementationMethodInfo.GetCustomAttribute(_hooks.Attribute);
+                var annotation = implementationMethodInfo.GetCustomAttribute(_hook.Attribute);
 
                 if (annotation != null)
                 {
-                    _hooks.OnBefore();
+                    _hook.OnBefore();
                 }
                 
                 var result = targetMethod.Invoke(_target, args);
 
                 if (annotation != null)
                 {
-                    _hooks.OnAfter();
+                    _hook.OnAfter();
                 }
                 
                 return result;
             }
 
-            public void SetTarget(object target, IHooks hooks)
+            public void SetTarget(object target, IHook hook)
             {
-                _hooks = hooks;
+                _hook = hook;
                 _target = target;
             }
         }
