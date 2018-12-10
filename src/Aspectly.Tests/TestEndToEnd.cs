@@ -170,21 +170,6 @@ namespace Aspectly.Tests
             void OnAfter();
         }
         
-        public class NullHook : IHook
-        {
-            public Type Attribute => typeof(Attribute);
-            
-            public void OnBefore()
-            {
-                
-            }
-
-            public void OnAfter()
-            {
-                
-            }
-        }
-
         public abstract class Hook<T> : IHook where T : Attribute
         {            
             public Type Attribute => typeof(T);
