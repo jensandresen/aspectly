@@ -133,6 +133,36 @@ namespace Aspectly.Tests
             );
         }
 
+        [Fact]
+        public void support_for_multiple_hooks_on_same_attribute()
+        {
+            var invocations = new LinkedList<string>();
+            
+            var sut = new ProxyFactory();
+
+            var firstHook = new InlineHook<FooAttribute>(
+                onBefore: () => invocations.AddLast("First:Before"),
+                onAfter: () => invocations.AddLast("First:After")
+            );
+            
+            var secondHook = new InlineHook<FooAttribute>(
+                onBefore: () => invocations.AddLast("Second:Before"),
+                onAfter: () => invocations.AddLast("Second:After")
+            );
+
+            var proxy = sut.CreateProxy<IFoo>(
+                instance: new FooImpl(),
+                hook: new IHook[] {firstHook, secondHook}
+            );
+            
+            proxy.Print();
+
+            Assert.Equal(
+                expected: new[] {"First:Before", "Second:Before", "First:After", "Second:After"},
+                actual: invocations
+            );
+        }
+
         public interface IHook
         {
             Type Attribute { get; }
