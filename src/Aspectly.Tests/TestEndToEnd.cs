@@ -1,5 +1,8 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
+using Castle.Core.Internal;
 using Xunit;
 
 namespace Aspectly.Tests
@@ -100,6 +103,36 @@ namespace Aspectly.Tests
             Assert.True(wasInvoked);
         }
 
+        [Fact]
+        public void support_for_multiple_attributes()
+        {
+            var invocations = new LinkedList<string>();
+            
+            var sut = new ProxyFactory();
+
+            var fooHook = new InlineHook<FooAttribute>(
+                onBefore: () => invocations.AddLast("Foo:Before"),
+                onAfter: () => invocations.AddLast("Foo:After")
+            );
+            
+            var barHook = new InlineHook<BarAttribute>(
+                onBefore: () => invocations.AddLast("Bar:Before"),
+                onAfter: () => invocations.AddLast("Bar:After")
+            );
+
+            var proxy = sut.CreateProxy<IFoo>(
+                instance: new MultipleAttributes(),
+                hook: new IHook[] {fooHook, barHook}
+            );
+            
+            proxy.Print();
+
+            Assert.Equal(
+                expected: new[] {"Foo:Before", "Bar:Before", "Foo:After", "Bar:After"},
+                actual: invocations
+            );
+        }
+
         public interface IHook
         {
             Type Attribute { get; }
@@ -161,11 +194,11 @@ namespace Aspectly.Tests
         
         public class ProxyFactory
         {
-            public TProxy CreateProxy<TProxy>(TProxy instance, IHook hook = null) where TProxy : class
+            public TProxy CreateProxy<TProxy>(TProxy instance, params IHook[] hook) where TProxy : class
             {
                 var proxy = DispatchProxy.Create<TProxy, Interceptor>();
                 var interceptor = proxy as Interceptor;
-                interceptor?.SetTarget(instance, hook ?? new NullHook());
+                interceptor?.SetTarget(instance, hook);
                 
                 return proxy;
             }
@@ -174,7 +207,7 @@ namespace Aspectly.Tests
         public class Interceptor : DispatchProxy
         {
             private object _target;
-            private IHook _hook;
+            private IHook[] _hook;
 
             protected override object Invoke(MethodInfo targetMethod, object[] args)
             {
@@ -183,26 +216,27 @@ namespace Aspectly.Tests
                 
                 var implementationMethodInfo = map.TargetMethods[index];
 
-                var annotation = implementationMethodInfo.GetCustomAttribute(_hook.Attribute);
+                var annotations = implementationMethodInfo
+                    .GetCustomAttributes()
+                    .Select(annotation => annotation.GetType())
+                    .ToList();
 
-                if (annotation != null)
-                {
-                    _hook.OnBefore();
-                }
+                var hooks = _hook
+                    .Where(hook => annotations.Any(annotation => annotation == hook.Attribute))
+                    .ToList();
+
+                hooks.ForEach(x => x.OnBefore());
                 
                 var result = targetMethod.Invoke(_target, args);
 
-                if (annotation != null)
-                {
-                    _hook.OnAfter();
-                }
+                hooks.ForEach(x => x.OnAfter());
                 
                 return result;
             }
 
-            public void SetTarget(object target, IHook hook)
+            public void SetTarget(object target, IHook[] hook)
             {
-                _hook = hook;
+                _hook = hook ?? new IHook[0];
                 _target = target;
             }
         }
@@ -221,7 +255,21 @@ namespace Aspectly.Tests
             }
         }
 
+        public class MultipleAttributes : IFoo
+        {
+            [Foo, Bar]
+            public void Print()
+            {
+                
+            }
+        }
+
         public class FooAttribute : Attribute
+        {
+            
+        }
+
+        public class BarAttribute : Attribute
         {
             
         }
