@@ -327,7 +327,7 @@ namespace Aspectly.Tests
                 return Task.FromResult(realResult);
             }
 
-            private object GetResultFromGenericTask<T>(Task<T> task)
+            private T GetResultFromGenericTask<T>(Task<T> task)
             {
                 return task.GetAwaiter().GetResult();
             }
