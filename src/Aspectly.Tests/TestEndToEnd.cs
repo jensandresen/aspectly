@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Reflection.Metadata;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -223,45 +224,95 @@ namespace Aspectly.Tests
             );
         }
 
+        [Fact]
+        public async Task hooks_can_be_task_based()
+        {
+            var list = new LinkedList<string>();
+
+            var sut = new ProxyFactory();
+
+            var hook = new InlineHook<FooAttribute>(
+                onBefore: async () =>
+                {
+                    await Task.Delay(1000);
+                    list.AddLast("before");
+                },
+                onAfter: async () => list.AddLast("after")
+            );
+
+            var proxy = sut.CreateProxy<IAsyncFoo>(
+                instance: new StubAsyncFoo("proxy result"),
+                hook: hook
+            );
+
+            var result = await proxy.Print();
+
+            Assert.Equal(
+                expected: new[] {"before", "proxy result", "after"},
+                actual: list
+            );            
+        }
+
         public interface IHook
         {
             Type Attribute { get; }
-            void OnBefore();
-            void OnAfter();
+            Task OnBefore();
+            Task OnAfter();
         }
 
         public abstract class Hook<T> : IHook where T : Attribute
         {
             public Type Attribute => typeof(T);
 
-            public virtual void OnBefore()
+            public virtual Task OnBefore()
             {
+                return Task.CompletedTask;
             }
 
-            public virtual void OnAfter()
+            public virtual Task OnAfter()
             {
+                return Task.CompletedTask;
             }
         }
 
         public class InlineHook<T> : Hook<T> where T : Attribute
         {
-            private readonly Action _onBefore;
-            private readonly Action _onAfter;
+            private readonly Func<Task> _onBefore;
+            private readonly Func<Task> _onAfter;
 
-            public InlineHook(Action onBefore = null, Action onAfter = null)
+            public InlineHook() : this(Task.CompletedTask, Task.CompletedTask)
             {
-                _onBefore = onBefore ?? (() => { });
-                _onAfter = onAfter ?? (() => { });
+                
+            }
+            
+            public InlineHook(Task onBefore = null, Task onAfter = null)
+                : this(() => onBefore ?? Task.CompletedTask, () => onAfter ?? Task.CompletedTask)
+            {
             }
 
-            public override void OnBefore()
+            public InlineHook(Func<Task> onBefore, Func<Task> onAfter)
             {
-                _onBefore();
+                _onBefore = onBefore;
+                _onAfter = onAfter;
             }
 
-            public override void OnAfter()
+            public InlineHook(Action onBefore = null, Action onAfter = null) 
+                : this(
+                    onBefore: () => Task.CompletedTask.ContinueWith(x => onBefore?.Invoke()),
+                    onAfter: () => Task.CompletedTask.ContinueWith(x => onAfter?.Invoke())
+                )
             {
-                _onAfter();
+                
+            }
+
+            public override Task OnBefore()
+            {
+                return _onBefore();
+            }
+
+            public override Task OnAfter()
+            {
+                return _onAfter();
             }
         }
 
@@ -298,24 +349,100 @@ namespace Aspectly.Tests
                     .Where(hook => annotations.Any(annotation => annotation == hook.Attribute))
                     .ToList();
 
-                hooks.ForEach(x => x.OnBefore());
+                var isTaskBased = IsTaskBased(targetMethod);
 
-                var result = InvokeMethodOnTarget(targetMethod, args);
+                if (!isTaskBased)
+                {
+                    throw new Exception("non-task-based methods not supported yet!");
+                    
+                    var befores = hooks.Select(x => x.OnBefore()).ToArray();
+                    Task.WhenAll(befores).GetAwaiter().GetResult();
+                    
+                    var returnValue = targetMethod.Invoke(_target, args);
 
-                hooks.ForEach(x => x.OnAfter());
+                    var afters = hooks.Select(x => x.OnAfter()).ToArray();
+                    Task.WhenAll(afters).GetAwaiter().GetResult();
+
+                    return returnValue;
+                }
+
+                if (targetMethod.ReturnType.IsGenericType)
+                {
+                    return HandleGeneric(hooks, targetMethod, args);
+                }
+
+                return HandleNonGeneric(hooks, targetMethod, args);
+            }
+
+            private Task HandleGeneric(IEnumerable<IHook> hooks, MethodInfo targetMethod, object[] args)
+            {
+                var myHooks = hooks.ToArray();
+
+                var befores = InvokeBefores(myHooks);
+                
+                var task = (Task)targetMethod.Invoke(_target, args);
+                var result = Weird((dynamic) task);
+                
+                var afters = InvokeAfters(myHooks);
+
+                return CallAll(befores, result, afters);
+            }
+            
+            private async Task<T> CallAll<T>(Task befores, Task<T> target, Task afters)
+            {
+                await befores;
+                var result = await target;
+                await afters;
 
                 return result;
             }
 
+            private async Task<T> Weird<T>(Task<T> task)
+            {
+                return await task;
+            }
+
+            private async Task HandleNonGeneric(IEnumerable<IHook> hooks, MethodInfo targetMethod, object[] args)
+            {
+                var myHooks = hooks.ToArray();
+
+                await InvokeBefores(myHooks);
+                
+                var task = (Task)targetMethod.Invoke(_target, args);
+                await task;
+
+                await InvokeAfters(myHooks);
+            }
+            
+            private bool IsGeneric(Task task)
+            {
+                return task.GetType().IsGenericType;
+            }
+            
+            private async Task InvokeBefores(IEnumerable<IHook> hooks)
+            {
+                foreach (var hook in hooks)
+                {
+                    await hook.OnBefore();
+                }
+            }
+
+            private async Task InvokeAfters(IEnumerable<IHook> hooks)
+            {
+                foreach (var hook in hooks)
+                {
+                    await hook.OnAfter();
+                }
+            }
+
+            private bool IsTaskBased(MethodInfo methodInfo)
+            {
+                return typeof(Task).IsAssignableFrom(methodInfo.ReturnType);
+            }
+            
             private object InvokeMethodOnTarget(MethodInfo targetMethod, object[] args)
             {
-                var returnValue = targetMethod.Invoke(_target, args);                
-                var task = returnValue as Task;
-
-                if (task == null)
-                {
-                    return returnValue;
-                }
+                var task = (Task)targetMethod.Invoke(_target, args);                
 
                 if (!task.GetType().IsGenericType)
                 {
