@@ -331,23 +331,35 @@ namespace Aspectly.Tests
         public class Interceptor : DispatchProxy
         {
             private object _target;
-            private IHook[] _hook;
+            private IHook[] _hooks;
+
+            private MethodInfo GetImplementationSignatureOf(MethodInfo targetInterfaceMethod)
+            {
+                var map = _target.GetType().GetInterfaceMap(targetInterfaceMethod.DeclaringType);
+                var index = Array.IndexOf(map.InterfaceMethods, targetInterfaceMethod);
+
+                return map.TargetMethods[index];
+            }
+
+            private IHook[] GetHooksFor(MethodInfo targetInterfaceSignature)
+            {
+                var implementationSignature = GetImplementationSignatureOf(targetInterfaceSignature);
+
+                var attributeAnnotations = implementationSignature
+                    .GetCustomAttributes()
+                    .Select(attribute => attribute.GetType())
+                    .ToList();
+
+                var hooks = _hooks
+                    .Where(hook => attributeAnnotations.Any(annotation => annotation == hook.Attribute))
+                    .ToArray();
+                
+                return hooks;
+            }
 
             protected override object Invoke(MethodInfo targetMethod, object[] args)
             {
-                var map = _target.GetType().GetInterfaceMap(targetMethod.DeclaringType);
-                var index = Array.IndexOf(map.InterfaceMethods, targetMethod);
-
-                var implementationMethodInfo = map.TargetMethods[index];
-
-                var annotations = implementationMethodInfo
-                    .GetCustomAttributes()
-                    .Select(annotation => annotation.GetType())
-                    .ToList();
-
-                var hooks = _hook
-                    .Where(hook => annotations.Any(annotation => annotation == hook.Attribute))
-                    .ToList();
+                var hooks = GetHooksFor(targetMethod);
 
                 var isTaskBased = IsTaskBased(targetMethod);
 
@@ -371,19 +383,18 @@ namespace Aspectly.Tests
                     return HandleGeneric(hooks, targetMethod, args);
                 }
 
+                throw new NotSupportedException("generic return types are not supported yet!");
                 return HandleNonGeneric(hooks, targetMethod, args);
             }
 
-            private Task HandleGeneric(IEnumerable<IHook> hooks, MethodInfo targetMethod, object[] args)
+            private Task HandleGeneric(IHook[] hooks, MethodInfo targetMethod, object[] args)
             {
-                var myHooks = hooks.ToArray();
-
-                var befores = InvokeBefores(myHooks);
+                var befores = InvokeBefores(hooks);
                 
                 var task = (Task)targetMethod.Invoke(_target, args);
                 var result = Weird((dynamic) task);
                 
-                var afters = InvokeAfters(myHooks);
+                var afters = InvokeAfters(hooks);
 
                 return CallAll(befores, result, afters);
             }
@@ -461,7 +472,7 @@ namespace Aspectly.Tests
             
             public void SetTarget(object target, IHook[] hook)
             {
-                _hook = hook ?? new IHook[0];
+                _hooks = hook ?? new IHook[0];
                 _target = target;
             }
         }
