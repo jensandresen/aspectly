@@ -1,17 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Aspectly.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Xunit;
 
 namespace Aspectly.Tests;
 
-public class UnitTest1
+public class TestEndToEnd
 {
     [Fact]
-    public async Task Test1()
+    public async Task decorates_target_with_expected_aspect_when_single_trigger_has_been_annotated()
     {
         var spy = new Spy();
         
@@ -19,16 +18,16 @@ public class UnitTest1
             .ConfigureServices(services =>
             {
                 services.AddSingleton(spy);
-                services.AddTransient<IFoo, Foo>();
+                services.AddTransient<ITargetService, TargetService>();
                 
-                services.AddAspects(options =>
+                services.RewireWithAspects(options =>
                 {
                     options.Register<ReportToSpyAttribute, SpyAspect>();
                 });
             })
             .Build();
 
-        var foo = host.Services.GetRequiredService<IFoo>();
+        var foo = host.Services.GetRequiredService<ITargetService>();
         await foo.Bar();
 
         Assert.Equal(
@@ -41,6 +40,31 @@ public class UnitTest1
             actual: spy.Items
         );
     }
+
+    [Fact]
+    public async Task does_not_invoke_aspect_when_no_rewiring_as_been_made()
+    {
+        var spy = new Spy();
+        
+        using var host = Host.CreateDefaultBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton(spy);
+                services.AddTransient<ITargetService, TargetService>();
+            })
+            .Build();
+
+        var foo = host.Services.GetRequiredService<ITargetService>();
+        await foo.Bar();
+
+        Assert.Equal(
+            expected: new[]
+            {
+                "foo-bar",
+            },
+            actual: spy.Items
+        );
+    }
 }
 
 public class Spy
@@ -48,16 +72,16 @@ public class Spy
     public List<string> Items { get; set; } = new List<string>();
 }
 
-public interface IFoo
+public interface ITargetService
 {
     Task Bar();
 }
 
-public class Foo : IFoo
+public class TargetService : ITargetService
 {
     private readonly Spy _spy;
 
-    public Foo(Spy spy)
+    public TargetService(Spy spy)
     {
         _spy = spy;
     }
@@ -75,7 +99,7 @@ public class ReportToSpyAttribute : Attribute
     
 }
 
-public class SpyAspect : IAsyncAspect
+public class SpyAspect : IAspect
 {
     private readonly Spy _spy;
 
@@ -83,16 +107,11 @@ public class SpyAspect : IAsyncAspect
     {
         _spy = spy;
     }
-    
-    public Task Before()
+
+    public async Task Invoke(AspectContext context, AspectDelegate next)
     {
         _spy.Items.Add("Before");
-        return Task.CompletedTask;
-    }
-
-    public Task After()
-    {
+        await next();
         _spy.Items.Add("After");
-        return Task.CompletedTask;
     }
 }
