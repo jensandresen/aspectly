@@ -1,6 +1,6 @@
 using Moq;
 
-namespace Aspectly.Tests;
+namespace Aspectly.Tests.TestDoubles;
 
 public static class Dummy
 {

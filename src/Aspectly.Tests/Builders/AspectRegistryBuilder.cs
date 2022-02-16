@@ -1,4 +1,4 @@
-namespace Aspectly.Tests;
+namespace Aspectly.Tests.Builders;
 
 internal class AspectRegistryBuilder
 {
