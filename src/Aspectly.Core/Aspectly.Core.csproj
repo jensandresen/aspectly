@@ -13,6 +13,7 @@
     <PackageProjectUrl>https://github.com/jensandresen/aspectly</PackageProjectUrl>
     <RepositoryUrl>https://github.com/jensandresen/aspectly</RepositoryUrl>
     <PackageTags>aspectly, aop</PackageTags>
+    <PackageLicenseUrl>https://github.com/jensandresen/aspectly/blob/master/LICENSE</PackageLicenseUrl>
   </PropertyGroup>
 
   <ItemGroup>

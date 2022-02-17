@@ -420,3 +420,4 @@ ASALocalRun/
 # End of https://www.gitignore.io/api/visualstudio,visualstudiocode,rider
 
 output/
+.DS_Store
