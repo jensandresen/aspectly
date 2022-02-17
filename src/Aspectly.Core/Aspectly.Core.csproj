@@ -13,7 +13,8 @@
     <PackageProjectUrl>https://github.com/jensandresen/aspectly</PackageProjectUrl>
     <RepositoryUrl>https://github.com/jensandresen/aspectly</RepositoryUrl>
     <PackageTags>aspectly, aop</PackageTags>
-    <PackageLicenseUrl>https://github.com/jensandresen/aspectly/blob/master/LICENSE</PackageLicenseUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Copyright>Copyright (c) 2021 Jens Andresen</Copyright>
   </PropertyGroup>
 
   <ItemGroup>
