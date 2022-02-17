@@ -4,7 +4,15 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <RootNamespace>Aspectly</RootNamespace>
+    <PackageId>Aspectly</PackageId>
+    <Title>Aspectly</Title>
+    <Authors>Jens Andresen</Authors>
+    <Description>A small library that enables you to use AOP to add cross cutting decorations to your services.</Description>
+    <PackageProjectUrl>https://github.com/jensandresen/aspectly</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/jensandresen/aspectly</RepositoryUrl>
+    <PackageTags>aspectly, aop</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

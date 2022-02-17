@@ -54,13 +54,13 @@ public static class ServiceCollectionExtensions
             services.AddTransient(aspectType);
         }
         
-        var descriptorsOfAnnotatedServices = (ServiceDescriptor[])services
+        var descriptorsOfAnnotatedServices = services
             .Where(IsSupportedServiceDescriptor)
             .Where(x => aspectRegistry.HasTriggers(x.ImplementationType!))
             .ToArray();
         
         foreach (var serviceDescriptor in descriptorsOfAnnotatedServices)
-        {
+        { 
             aspectRegistry.RegisterAnnotatedService(serviceDescriptor.ImplementationType!);
         }
         
@@ -92,7 +92,7 @@ public static class ServiceCollectionExtensions
                 provider =>
                 {
                     var myClass = provider.GetRequiredService(implementationType);
-                    var interceptor = new MethodInterceptor(new AspectFactory(provider, aspectRegistry));
+                    var interceptor = new MethodInterceptor(new PipelineStepFactory(provider, aspectRegistry));
 
                     return _proxyGenerator.CreateInterfaceProxyWithTargetInterface(
                         interfaceToProxy: serviceType,

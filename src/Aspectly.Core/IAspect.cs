@@ -8,8 +8,3 @@ public interface IAspect
 }
 
 public delegate Task AspectDelegate();
-
-public class AspectContext
-{
-    
-}

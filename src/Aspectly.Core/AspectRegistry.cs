@@ -7,7 +7,7 @@ namespace Aspectly;
 
 internal class AspectRegistry
 {
-    private readonly List<AspectTrigger> _aspectTriggers = new List<AspectTrigger>();
+    private readonly List<AspectTriggerMap> _aspectTriggers = new List<AspectTriggerMap>();
     private readonly Dictionary<MethodInfo, AnnotatedServiceRegistration> _registrations = new Dictionary<MethodInfo,AnnotatedServiceRegistration>();
     
     public IEnumerable<Type> RegisteredAspectTypes => _aspectTriggers.Select(x => x.AspectType);
@@ -25,7 +25,7 @@ internal class AspectRegistry
             throw new InvalidAspectTypeException($"Type {aspectType} is an invalid aspect type. It must implement {typeof(IAspect)}.");
         }
         
-        _aspectTriggers.Add(new AspectTrigger(triggerAttributeType, aspectType));
+        _aspectTriggers.Add(new AspectTriggerMap(triggerAttributeType, aspectType));
     }
 
     public bool HasTriggers(Type implementationType)
@@ -52,9 +52,12 @@ internal class AspectRegistry
 
             foreach (var attribute in methodInfo.GetCustomAttributes())
             {
-                if (RegisteredTriggerAttributeTypes.Contains(attribute.GetType()))
+                var triggerMap = _aspectTriggers.SingleOrDefault(x => x.TriggerAttributeType == attribute.GetType());
+                
+                if (triggerMap is not null)
                 {
-                    registration.AddTriggerType(attribute.GetType());
+                    var temp = new TriggerInstanceToAspectType(attribute, triggerMap.AspectType);
+                    registration.AddTrigger(temp);
                 }
             }
 
@@ -65,46 +68,44 @@ internal class AspectRegistry
         }
     }
 
-    public IEnumerable<Type> GetAspectTypesFor(MethodInfo method)
+    public AnnotatedServiceRegistration? GetAspectRegistrationFor(MethodInfo method)
     {
-        if (!_registrations.TryGetValue(method, out var registration))
-        {
-            yield break;
-        }
-
-        foreach (var triggerType in registration.TriggerTypes)
-        {
-            var aspectTypes = _aspectTriggers
-                .Where(x => x.TriggerAttributeType == triggerType)
-                .Select(x => x.AspectType);
-
-            foreach (var aspectType in aspectTypes)
-            {
-                yield return aspectType;
-            }
-        }
+        _registrations.TryGetValue(method, out var registration);
+        return registration;
     }
     
     #region private helpers
 
-    private class AspectTrigger
-    {
-        public AspectTrigger(Type triggerAttributeType, Type aspectType)
-        {
-            TriggerAttributeType = triggerAttributeType;
-            AspectType = aspectType;
-        }
+    #endregion
+}
 
-        public Type TriggerAttributeType { get; private set; }
-        public Type AspectType { get; private set; }
+internal class TriggerInstanceToAspectType
+{
+    public TriggerInstanceToAspectType(Attribute attribute, Type aspectType)
+    {
+        Attribute = attribute;
+        AspectType = aspectType;
     }
 
-    #endregion
+    public Attribute Attribute { get; private set; }
+    public Type AspectType { get; private set; }
+}
+
+internal class AspectTriggerMap
+{
+    public AspectTriggerMap(Type triggerAttributeType, Type aspectType)
+    {
+        TriggerAttributeType = triggerAttributeType;
+        AspectType = aspectType;
+    }
+
+    public Type TriggerAttributeType { get; }
+    public Type AspectType { get; }
 }
 
 internal class AnnotatedServiceRegistration
 {
-    private readonly LinkedList<Type> _triggerTypes = new();
+    private readonly LinkedList<TriggerInstanceToAspectType> _toAspectTypes = new();
 
     public AnnotatedServiceRegistration(MethodInfo method)
     {
@@ -112,12 +113,13 @@ internal class AnnotatedServiceRegistration
     }
 
     public MethodInfo Method { get; }
-    public IEnumerable<Type> TriggerTypes => _triggerTypes;
-    public bool HasTriggers => _triggerTypes.Any();
+    public IEnumerable<TriggerInstanceToAspectType> Duno => _toAspectTypes;
+
+    public bool HasTriggers => _toAspectTypes.Any();
         
-    public void AddTriggerType(Type triggerType)
+    public void AddTrigger(TriggerInstanceToAspectType toAspectType)
     {
-        _triggerTypes.AddLast(triggerType);
+        _toAspectTypes.AddLast(toAspectType);
     }
 }
 

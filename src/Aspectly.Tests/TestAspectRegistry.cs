@@ -118,6 +118,9 @@ public class TestAspectRegistry
         Assert.Throws<InvalidAspectTypeException>(() => sut.RegisterAspectTrigger(typeof(Attribute), invalidAspectType));
     }
     
+    // test: disallow same trigger to be registered with different aspects
+    // test: allow same aspect to be registered with different triggers
+    
     #region private helper classes
 
     public class TriggerAttribute : Attribute { }

@@ -65,6 +65,61 @@ public class TestEndToEnd
             actual: spy.Items
         );
     }
+
+    [Fact]
+    public async Task aspects_are_invoked_in_order_of_their_triggers()
+    {
+        var spy = new Spy();
+        
+        using var host = Host.CreateDefaultBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton(spy);
+                services.AddTransient<ITargetService, TargetService>();
+                
+                services.RewireWithAspects(options =>
+                {
+                    options.Register<ColorAttribute, ColorAspect>();
+                });
+            })
+            .Build();
+
+        var foo = host.Services.GetRequiredService<ITargetService>();
+        await foo.Colors();
+
+        Assert.Equal(
+            expected: new[]
+            {
+                "red",
+                "blue",
+                "green",
+                "transparent",
+            },
+            actual: spy.Items
+        );
+    }
+
+    [Fact]
+    public async Task return_values_from_decorated_method_is_supported()
+    {
+        var spy = new Spy();
+        using var host = Host.CreateDefaultBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton(spy);
+                services.AddTransient<ITargetService, TargetService>();
+                services.RewireWithAspects(options =>
+                {
+                    options.Register<ColorAttribute, ColorAspect>();
+                });
+            })
+            .Build();
+
+        var foo = host.Services.GetRequiredService<ITargetService>();
+        var result = await foo.GetText();
+
+        Assert.Equal("foo", result);
+    }
 }
 
 public class Spy
@@ -75,6 +130,8 @@ public class Spy
 public interface ITargetService
 {
     Task Bar();
+    Task Colors();
+    Task<string> GetText();
 }
 
 public class TargetService : ITargetService
@@ -92,11 +149,52 @@ public class TargetService : ITargetService
         _spy.Items.Add("foo-bar");
         return Task.CompletedTask;
     }
+
+    [Color(Name = "red")]
+    [Color(Name = "blue")]
+    [Color(Name = "green")]
+    public Task Colors()
+    {
+        _spy.Items.Add("transparent");
+        return Task.CompletedTask;
+    }
+
+    [Color]
+    public Task<string> GetText()
+    {
+        return Task.FromResult("foo");
+    }
+}
+
+[AttributeUsage(AttributeTargets.Method, AllowMultiple = true)]
+public class ColorAttribute : Attribute
+{
+    public string? Name { get; set; }
 }
 
 public class ReportToSpyAttribute : Attribute
 {
     
+}
+
+public class ColorAspect : IAspect
+{
+    private readonly Spy _spy;
+
+    public ColorAspect(Spy spy)
+    {
+        _spy = spy;
+    }
+    
+    public async Task Invoke(AspectContext context, AspectDelegate next)
+    {
+        if (context.TriggerAttribute is ColorAttribute color)
+        {
+            _spy.Items.Add(color.Name);
+        }
+        
+        await next();
+    }
 }
 
 public class SpyAspect : IAspect

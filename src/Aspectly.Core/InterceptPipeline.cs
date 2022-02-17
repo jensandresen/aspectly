@@ -6,20 +6,22 @@ namespace Aspectly;
 
 internal class InterceptPipeline
 {
+    private readonly InterceptionContext _interceptionContext;
     private readonly Func<Task> _inner;
 
-    public InterceptPipeline(Func<Task> inner)
+    public InterceptPipeline(InterceptionContext interceptionContext, Func<Task> inner)
     {
+        _interceptionContext = interceptionContext;
         _inner = inner;
     }
     
-    public async Task Execute(AspectContext context, IEnumerable<IAspect> aspects)
+    public async Task Execute(IEnumerable<PipelineStep> steps)
     {
-        var temp = new LinkedList<IAspect>(aspects);
-        await InnerExecute(context, temp.First);
+        var temp = new LinkedList<PipelineStep>(steps);
+        await ExecuteStep(temp.First);
     }
     
-    private async Task InnerExecute(AspectContext context, LinkedListNode<IAspect>? current)
+    private async Task ExecuteStep(LinkedListNode<PipelineStep>? current)
     {
         if (current is null)
         {
@@ -28,8 +30,14 @@ internal class InterceptPipeline
         }
 
         var next = current.Next;
-        await current.Value
-            .Invoke(context, () => InnerExecute(context, next))
+        var step = current.Value;
+        var context = new AspectContext(
+            method: _interceptionContext.Method,
+            triggerAttribute: step.TriggerAttribute
+        );
+        
+        await step.Aspect
+            .Invoke(context, () => ExecuteStep(next))
             .ConfigureAwait(false);
     }
 }
